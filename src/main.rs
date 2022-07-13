@@ -2,7 +2,10 @@ use calamine::{open_workbook, Xlsx, Reader};
 
 use std::sync::mpsc;
 use std::fs::File;
+use std::path::Path;
 use std::thread;
+use std::process;
+use std::env;
 
 extern crate csv;
 
@@ -15,9 +18,41 @@ struct EmployeeRow {
     pub email: String,
 }
 
+struct Config {
+    filepath: String,
+    out_dir: String
+}
+
+impl Config {
+    fn new(args: &[String]) -> Result<Config, &'static str> {
+        if args.len() < 2 {
+            return Err("not enough arguments");
+        }
+
+        let path = Path::new(&args[1]);
+        let filepath = path.to_str().unwrap().to_string();
+
+        let mut out_dir: String = String::new();
+
+        if args.len() == 3 {
+            out_dir = args[2].clone();
+        } else {
+            out_dir = ".".to_string();
+        }
+
+        Ok(Config { filepath, out_dir })
+    }
+}
+
 fn main() {
-    let path = format!("{}/example-list.xlsx", env!("CARGO_MANIFEST_DIR"));
-    let mut workbook: Xlsx<_> = open_workbook(path).unwrap();
+    let args: Vec<String> = env::args().collect();
+
+    let config = Config::new(&args).unwrap_or_else(|err| {
+        println!("Problem parsing arguments: {}", err);
+        process::exit(1);
+    });
+
+    let mut workbook: Xlsx<_> = open_workbook(config.filepath.to_string()).unwrap();
 
     let (tx, rx) = mpsc::channel();
 
@@ -52,8 +87,11 @@ fn main() {
         "USPS"
     ];
 
-    let mut with_writer = Writer::from_path("./with.csv").unwrap();
-    let mut without_writer = Writer::from_path("./without.csv").unwrap();
+    let outpath = Path::new(&config.out_dir);
+
+
+    let mut with_writer = Writer::from_path(outpath.join("with.csv")).unwrap();
+    let mut without_writer = Writer::from_path(outpath.join("without.csv")).unwrap();
 
     write_headers(&mut with_writer);
     write_headers(&mut without_writer);
